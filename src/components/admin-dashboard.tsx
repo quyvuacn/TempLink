@@ -5,6 +5,7 @@ import QRCode from "react-qr-code";
 import {
   CloseIcon,
   CopyIcon,
+  DownloadIcon,
   EditIcon,
   FileIcon,
   LinkIcon,
@@ -79,11 +80,10 @@ function extension(filename: string) {
 }
 
 export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
-  const now = new Date();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
-  const [start, setStart] = useState(toLocalInput(new Date(now.getTime() + 5 * 60_000)));
-  const [end, setEnd] = useState(toLocalInput(new Date(now.getTime() + 2 * 60 * 60_000)));
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
   const [password, setPassword] = useState("");
   const [dragging, setDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -97,8 +97,10 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
   const [editFile, setEditFile] = useState<File | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [downloadingImage, setDownloadingImage] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const qrCardRef = useRef<HTMLDivElement>(null);
 
   const selectedUrl = selected ? `${siteUrl}/d/${selected.slug}` : "";
 
@@ -158,8 +160,8 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
   }, []);
 
   const canSubmit = useMemo(
-    () => Boolean(file && title.trim() && password.length >= 6 && start && end),
-    [file, title, password, start, end],
+    () => Boolean(file && title.trim() && (!password || password.length >= 6)),
+    [file, title, password],
   );
 
   function chooseFile(nextFile?: File) {
@@ -184,7 +186,7 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
 
     const startDate = new Date(start);
     const endDate = new Date(end);
-    if (endDate <= startDate) {
+    if (start && end && endDate <= startDate) {
       setToast({ message: "The expiration time must be after the start time.", type: "error" });
       return;
     }
@@ -199,9 +201,10 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
           title: title.trim(),
           originalName: file.name,
           sizeBytes: file.size,
-          downloadStart: startDate.toISOString(),
-          downloadEnd: endDate.toISOString(),
+          downloadStart: start ? startDate.toISOString() : null,
+          downloadEnd: end ? endDate.toISOString() : null,
           createdAt: new Date().toISOString(),
+          accessPassword: password,
         };
         setDocuments((current) => [item, ...current]);
         setSelected(item);
@@ -234,8 +237,8 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
             originalName: file.name,
             mimeType: file.type || "application/octet-stream",
             sizeBytes: file.size,
-            downloadStart: startDate.toISOString(),
-            downloadEnd: endDate.toISOString(),
+            downloadStart: start ? startDate.toISOString() : null,
+            downloadEnd: end ? endDate.toISOString() : null,
             password,
           }),
         });
@@ -259,17 +262,45 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
     }
   }
 
-  async function copy(value: string) {
+  async function copy(value: string, label = "Link") {
     await navigator.clipboard.writeText(value);
-    setToast({ message: "Link copied." });
+    setToast({ message: `${label} copied.` });
+  }
+
+  async function downloadQrImage() {
+    if (!selected || !qrCardRef.current) return;
+
+    setDownloadingImage(true);
+    try {
+      await document.fonts.ready;
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(qrCardRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+      });
+      const link = document.createElement("a");
+      const filename = selected.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "") || "document";
+      link.download = `${filename}-qr.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      setToast({ message: "QR image downloaded." });
+    } catch {
+      setToast({ message: "Could not create the QR image.", type: "error" });
+    } finally {
+      setDownloadingImage(false);
+    }
   }
 
   function openEditor(document: DocumentListItem) {
     setEditing(document);
     setEditTitle(document.title);
-    setEditStart(toLocalInput(new Date(document.downloadStart)));
-    setEditEnd(toLocalInput(new Date(document.downloadEnd)));
-    setEditPassword("");
+    setEditStart(document.downloadStart ? toLocalInput(new Date(document.downloadStart)) : "");
+    setEditEnd(document.downloadEnd ? toLocalInput(new Date(document.downloadEnd)) : "");
+    setEditPassword(document.accessPassword ?? "");
     setEditFile(null);
   }
 
@@ -279,7 +310,7 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
 
     const startDate = new Date(editStart);
     const endDate = new Date(editEnd);
-    if (!editTitle.trim() || endDate <= startDate) {
+    if (!editTitle.trim() || (editStart && editEnd && endDate <= startDate)) {
       setToast({ message: "Check the document name and availability window.", type: "error" });
       return;
     }
@@ -331,8 +362,9 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
           title: editTitle.trim(),
           originalName: editFile?.name ?? editing.originalName,
           sizeBytes: editFile?.size ?? editing.sizeBytes,
-          downloadStart: startDate.toISOString(),
-          downloadEnd: endDate.toISOString(),
+          downloadStart: editStart ? startDate.toISOString() : null,
+          downloadEnd: editEnd ? endDate.toISOString() : null,
+          accessPassword: editPassword || editing.accessPassword,
         };
       } else {
         const response = await fetch(`/api/admin/documents/${editing.id}`, {
@@ -340,8 +372,8 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title: editTitle.trim(),
-            downloadStart: startDate.toISOString(),
-            downloadEnd: endDate.toISOString(),
+            downloadStart: editStart ? startDate.toISOString() : null,
+            downloadEnd: editEnd ? endDate.toISOString() : null,
             password: editPassword,
             ...replacement,
           }),
@@ -467,39 +499,36 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
                 />
               </div>
               <div className="field">
-                <label htmlFor="start">Available from</label>
+                <label htmlFor="start">Available from <span className="optional-label">Optional</span></label>
                 <input
                   id="start"
                   type="datetime-local"
                   value={start}
                   onChange={(event) => setStart(event.target.value)}
-                  required
                 />
               </div>
               <div className="field">
-                <label htmlFor="end">Expires at</label>
+                <label htmlFor="end">Expires at <span className="optional-label">Optional</span></label>
                 <input
                   id="end"
                   type="datetime-local"
                   value={end}
                   onChange={(event) => setEnd(event.target.value)}
-                  min={start}
-                  required
+                  min={start || undefined}
                 />
               </div>
               <div className="field full">
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">Password <span className="optional-label">Optional</span></label>
                 <div className="password-wrap">
                   <input
                     id="password"
                     type="text"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="At least 6 characters"
+                    placeholder="Leave blank for direct download"
                     minLength={6}
                     maxLength={64}
                     autoComplete="off"
-                    required
                   />
                   <button className="text-action" type="button" onClick={generatePassword}>
                     Generate
@@ -538,8 +567,8 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
                       </div>
                     </div>
                     <div className="document-time">
-                      <strong>{formatDate(document.downloadStart)}</strong>
-                      <span>to {formatDate(document.downloadEnd)}</span>
+                      <strong>{document.downloadStart ? formatDate(document.downloadStart) : "Available now"}</strong>
+                      <span>{document.downloadEnd ? `to ${formatDate(document.downloadEnd)}` : "No expiration"}</span>
                     </div>
                     <div className="row-actions">
                       <button className="icon-button" type="button" title="Copy link" onClick={() => copy(url)}>
@@ -571,12 +600,40 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
 
       {selected && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelected(null)}>
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="qr-title" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="modal qr-modal" role="dialog" aria-modal="true" aria-labelledby="qr-title" onMouseDown={(event) => event.stopPropagation()}>
             <button className="icon-button modal-close" type="button" aria-label="Close" onClick={() => setSelected(null)}><CloseIcon /></button>
             <h3 id="qr-title">Download QR code</h3>
-            <p>{selected.title}</p>
-            <div className="qr-frame"><QRCode value={selectedUrl} size={192} fgColor="#132238" /></div>
+            <div className="qr-share-card" ref={qrCardRef}>
+              <span className="qr-card-brand">TempLink</span>
+              <h4>{selected.title}</h4>
+              <div className="qr-frame"><QRCode value={selectedUrl} size={192} fgColor="#132238" /></div>
+              {(selected.accessPassword || selected.downloadEnd) && (
+                <div className="qr-card-details">
+                  {selected.accessPassword && <div><span>Password</span><strong>{selected.accessPassword}</strong></div>}
+                  {selected.downloadEnd && <div><span>Expires at</span><strong>{formatDate(selected.downloadEnd)}</strong></div>}
+                </div>
+              )}
+            </div>
             <div className="share-link"><LinkIcon width="17" /><code>{selectedUrl}</code><button type="button" onClick={() => copy(selectedUrl)}>Copy</button></div>
+            <div className="qr-actions">
+              {selected.accessPassword && (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => copy(selected.accessPassword!, "Password")}
+                >
+                  <CopyIcon /> Copy password
+                </button>
+              )}
+              <button
+                className="primary-button"
+                type="button"
+                disabled={downloadingImage}
+                onClick={downloadQrImage}
+              >
+                <DownloadIcon /> {downloadingImage ? "Creating…" : "Download image"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -613,35 +670,33 @@ export function AdminDashboard({ initialDocuments, demoMode, siteUrl }: Props) {
               </div>
               <div className="form-grid edit-time-grid">
                 <div className="field">
-                  <label htmlFor="edit-start">Available from</label>
+                  <label htmlFor="edit-start">Available from <span className="optional-label">Optional</span></label>
                   <input
                     id="edit-start"
                     type="datetime-local"
                     value={editStart}
                     onChange={(event) => setEditStart(event.target.value)}
-                    required
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="edit-end">Expires at</label>
+                  <label htmlFor="edit-end">Expires at <span className="optional-label">Optional</span></label>
                   <input
                     id="edit-end"
                     type="datetime-local"
                     value={editEnd}
-                    min={editStart}
+                    min={editStart || undefined}
                     onChange={(event) => setEditEnd(event.target.value)}
-                    required
                   />
                 </div>
               </div>
               <div className="field">
-                <label htmlFor="edit-password">New password</label>
+                <label htmlFor="edit-password">Password <span className="optional-label">Optional</span></label>
                 <input
                   id="edit-password"
                   type="text"
                   value={editPassword}
                   onChange={(event) => setEditPassword(event.target.value)}
-                  placeholder="Leave blank to keep the current password"
+                  placeholder="Leave blank for direct download"
                   minLength={6}
                   maxLength={64}
                   autoComplete="off"

@@ -9,9 +9,10 @@ type DocumentRow = {
   title: string;
   original_name: string;
   size_bytes: number | string;
-  download_start: string;
-  download_end: string;
+  download_start: string | null;
+  download_end: string | null;
   created_at: string;
+  access_password: string | null;
 };
 
 const now = Date.now();
@@ -26,6 +27,7 @@ export const demoDocuments: DocumentListItem[] = [
     downloadStart: new Date(now - 20 * 60_000).toISOString(),
     downloadEnd: new Date(now + 100 * 60_000).toISOString(),
     createdAt: new Date(now - 24 * 60 * 60_000).toISOString(),
+    accessPassword: "WORKSHOP26",
   },
   {
     id: "demo-2",
@@ -36,6 +38,7 @@ export const demoDocuments: DocumentListItem[] = [
     downloadStart: new Date(now + 24 * 60 * 60_000).toISOString(),
     downloadEnd: new Date(now + 26 * 60 * 60_000).toISOString(),
     createdAt: new Date(now - 2 * 60 * 60_000).toISOString(),
+    accessPassword: "PRACTICE26",
   },
 ];
 
@@ -49,6 +52,7 @@ function mapRow(row: DocumentRow): DocumentListItem {
     downloadStart: row.download_start,
     downloadEnd: row.download_end,
     createdAt: row.created_at,
+    accessPassword: row.access_password,
   };
 }
 
@@ -58,7 +62,7 @@ export async function listDocuments(): Promise<DocumentListItem[]> {
   const { data, error } = await getSupabaseAdmin()
     .from("documents")
     .select(
-      "id, slug, title, original_name, size_bytes, download_start, download_end, created_at",
+      "id, slug, title, original_name, size_bytes, download_start, download_end, created_at, access_password",
     )
     .order("created_at", { ascending: false })
     .limit(50);
@@ -71,13 +75,13 @@ export async function getPublicDocument(slug: string): Promise<PublicDocument | 
   if (isDemoMode() || !isSupabaseConfigured()) {
     const document = demoDocuments.find((item) => item.slug === slug);
     if (!document) return null;
-    const { id: _id, createdAt: _createdAt, ...safe } = document;
-    return safe;
+    const { id: _id, createdAt: _createdAt, accessPassword, ...safe } = document;
+    return { ...safe, passwordRequired: Boolean(accessPassword) };
   }
 
   const { data, error } = await getSupabaseAdmin()
     .from("documents")
-    .select("slug, title, original_name, size_bytes, download_start, download_end")
+    .select("slug, title, original_name, size_bytes, download_start, download_end, access_password, password_hash")
     .eq("slug", slug)
     .eq("active", true)
     .maybeSingle();
@@ -92,5 +96,6 @@ export async function getPublicDocument(slug: string): Promise<PublicDocument | 
     sizeBytes: Number(data.size_bytes),
     downloadStart: data.download_start,
     downloadEnd: data.download_end,
+    passwordRequired: Boolean(data.access_password || data.password_hash),
   };
 }

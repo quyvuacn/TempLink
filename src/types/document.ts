@@ -6,24 +6,25 @@ export type DocumentListItem = {
   title: string;
   originalName: string;
   sizeBytes: number;
-  downloadStart: string;
-  downloadEnd: string;
+  downloadStart: string | null;
+  downloadEnd: string | null;
   createdAt: string;
+  accessPassword: string | null;
 };
 
 export type PublicDocument = Pick<
   DocumentListItem,
   "slug" | "title" | "originalName" | "sizeBytes" | "downloadStart" | "downloadEnd"
->;
+> & { passwordRequired: boolean };
 
 export function getDocumentStatus(
   document: Pick<DocumentListItem, "downloadStart" | "downloadEnd">,
   now = Date.now(),
 ): DocumentStatus {
-  const start = new Date(document.downloadStart).getTime();
-  const end = new Date(document.downloadEnd).getTime();
+  const start = document.downloadStart ? new Date(document.downloadStart).getTime() : null;
+  const end = document.downloadEnd ? new Date(document.downloadEnd).getTime() : null;
 
-  if (now < start) return "scheduled";
-  if (now > end) return "expired";
+  if (start !== null && now < start) return "scheduled";
+  if (end !== null && now > end) return "expired";
   return "active";
 }

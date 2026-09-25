@@ -12,9 +12,10 @@ create table if not exists public.documents (
   storage_path text not null unique,
   mime_type text not null default 'application/octet-stream',
   size_bytes bigint not null check (size_bytes > 0),
-  password_hash text not null,
-  download_start timestamptz not null,
-  download_end timestamptz not null,
+  password_hash text,
+  access_password text check (access_password is null or char_length(access_password) between 6 and 64),
+  download_start timestamptz,
+  download_end timestamptz,
   active boolean not null default true,
   created_at timestamptz not null default now(),
   constraint valid_download_window check (download_end > download_start)
@@ -36,6 +37,12 @@ on public.download_attempts (document_id, ip_hash, attempted_at desc);
 
 alter table public.documents enable row level security;
 alter table public.download_attempts enable row level security;
+
+-- Support databases created before plaintext passwords were introduced.
+alter table public.documents add column if not exists access_password text;
+alter table public.documents alter column password_hash drop not null;
+alter table public.documents alter column download_start drop not null;
+alter table public.documents alter column download_end drop not null;
 
 -- Không tạo policy public. Mọi thao tác database/storage đều đi qua
 -- Next.js server bằng secret/service-role key; bucket "documents" luôn private.

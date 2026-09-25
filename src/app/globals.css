@@ -313,6 +313,13 @@ a {
   font-weight: 730;
 }
 
+.optional-label {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 560;
+}
+
 .field input {
   width: 100%;
   min-height: 46px;
@@ -751,6 +758,105 @@ a {
   line-height: 1.5;
 }
 
+.qr-modal {
+  width: min(470px, 100%);
+}
+
+.qr-share-card {
+  margin-top: 20px;
+  padding: 24px;
+  color: var(--ink);
+  border: 1px solid #e1e6ed;
+  border-radius: 17px;
+  background: #fff;
+}
+
+.qr-card-brand {
+  display: block;
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.qr-share-card h4 {
+  margin: 6px auto 18px;
+  max-width: 340px;
+  font-size: 1.2rem;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.qr-share-card .qr-frame {
+  padding: 12px;
+}
+
+.qr-card-details {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: left;
+}
+
+.qr-card-details > div {
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: #f6f8fb;
+}
+
+.qr-card-details > :only-child,
+.window-panel > :only-child {
+  grid-column: 1 / -1;
+}
+
+.qr-card-details span,
+.qr-card-details strong {
+  display: block;
+}
+
+.qr-card-details span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.qr-card-details strong {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.qr-actions {
+  margin-top: 13px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.qr-actions .primary-button,
+.qr-actions .secondary-button {
+  width: 100%;
+}
+
+.qr-actions > :only-child {
+  grid-column: 1 / -1;
+}
+
+.qr-actions svg {
+  width: 16px;
+  height: 16px;
+}
+
+.legacy-password-note {
+  margin: 12px 0 0 !important;
+  color: var(--danger) !important;
+}
+
 .edit-modal {
   width: min(560px, 100%);
   text-align: left;
@@ -1093,6 +1199,11 @@ a {
   }
 
   .window-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .qr-card-details,
+  .qr-actions {
     grid-template-columns: 1fr;
   }
 

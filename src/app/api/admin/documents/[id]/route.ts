@@ -1,5 +1,4 @@
 import { hasAdminSession } from "@/lib/admin-session";
-import { hashPassword } from "@/lib/security";
 import { DOCUMENT_BUCKET, getSupabaseAdmin } from "@/lib/supabase/admin";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -21,9 +20,14 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     const title = typeof body.title === "string" ? body.title.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
     const downloadStart =
-      typeof body.downloadStart === "string" ? new Date(body.downloadStart) : null;
+      typeof body.downloadStart === "string" && body.downloadStart
+        ? new Date(body.downloadStart)
+        : null;
     const downloadEnd =
-      typeof body.downloadEnd === "string" ? new Date(body.downloadEnd) : null;
+      typeof body.downloadEnd === "string" && body.downloadEnd
+        ? new Date(body.downloadEnd)
+        : null;
+    const passwordProvided = typeof body.password === "string";
 
     replacementPath = typeof body.storagePath === "string" ? body.storagePath : "";
     const originalName = typeof body.originalName === "string" ? body.originalName : "";
@@ -37,11 +41,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       !title ||
       title.length > 120 ||
       (password.length > 0 && (password.length < 6 || password.length > 64)) ||
-      !downloadStart ||
-      !downloadEnd ||
-      Number.isNaN(downloadStart.getTime()) ||
-      Number.isNaN(downloadEnd.getTime()) ||
-      downloadEnd <= downloadStart ||
+      (downloadStart && Number.isNaN(downloadStart.getTime())) ||
+      (downloadEnd && Number.isNaN(downloadEnd.getTime())) ||
+      (downloadStart && downloadEnd && downloadEnd <= downloadStart) ||
       (replacingFile && (!validStoragePath(replacementPath) || !originalName || sizeBytes <= 0))
     ) {
       if (replacementPath && validStoragePath(replacementPath)) {
@@ -67,11 +69,14 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const updates: Record<string, unknown> = {
       title,
-      download_start: downloadStart.toISOString(),
-      download_end: downloadEnd.toISOString(),
+      download_start: downloadStart?.toISOString() ?? null,
+      download_end: downloadEnd?.toISOString() ?? null,
     };
 
-    if (password) updates.password_hash = await hashPassword(password);
+    if (passwordProvided) {
+      updates.access_password = password || null;
+      updates.password_hash = null;
+    }
     if (replacingFile) {
       updates.storage_path = replacementPath;
       updates.original_name = originalName;
@@ -84,7 +89,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       .update(updates)
       .eq("id", id)
       .select(
-        "id, slug, title, original_name, size_bytes, download_start, download_end, created_at",
+        "id, slug, title, original_name, size_bytes, download_start, download_end, created_at, access_password",
       )
       .single();
 
@@ -104,6 +109,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         downloadStart: data.download_start,
         downloadEnd: data.download_end,
         createdAt: data.created_at,
+        accessPassword: data.access_password,
       },
     });
   } catch {

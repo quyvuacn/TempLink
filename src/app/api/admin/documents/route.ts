@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
 import { hasAdminSession } from "@/lib/admin-session";
-import { hashPassword } from "@/lib/security";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 function createSlug() {
@@ -22,9 +21,13 @@ export async function POST(request: Request) {
     const sizeBytes = typeof body.sizeBytes === "number" ? body.sizeBytes : 0;
     const password = typeof body.password === "string" ? body.password : "";
     const downloadStart =
-      typeof body.downloadStart === "string" ? new Date(body.downloadStart) : null;
+      typeof body.downloadStart === "string" && body.downloadStart
+        ? new Date(body.downloadStart)
+        : null;
     const downloadEnd =
-      typeof body.downloadEnd === "string" ? new Date(body.downloadEnd) : null;
+      typeof body.downloadEnd === "string" && body.downloadEnd
+        ? new Date(body.downloadEnd)
+        : null;
 
     if (
       !/^[0-9a-f-]{36}\/[a-zA-Z0-9._-]+$/.test(storagePath) ||
@@ -32,18 +35,15 @@ export async function POST(request: Request) {
       title.length > 120 ||
       !originalName ||
       sizeBytes <= 0 ||
-      password.length < 6 ||
+      (password.length > 0 && password.length < 6) ||
       password.length > 64 ||
-      !downloadStart ||
-      !downloadEnd ||
-      Number.isNaN(downloadStart.getTime()) ||
-      Number.isNaN(downloadEnd.getTime()) ||
-      downloadEnd <= downloadStart
+      (downloadStart && Number.isNaN(downloadStart.getTime())) ||
+      (downloadEnd && Number.isNaN(downloadEnd.getTime())) ||
+      (downloadStart && downloadEnd && downloadEnd <= downloadStart)
     ) {
       return Response.json({ error: "Invalid document details." }, { status: 400 });
     }
 
-    const passwordHash = await hashPassword(password);
     const slug = createSlug();
     const { data, error } = await getSupabaseAdmin()
       .from("documents")
@@ -54,12 +54,13 @@ export async function POST(request: Request) {
         storage_path: storagePath,
         mime_type: mimeType,
         size_bytes: sizeBytes,
-        password_hash: passwordHash,
-        download_start: downloadStart.toISOString(),
-        download_end: downloadEnd.toISOString(),
+        access_password: password || null,
+        password_hash: null,
+        download_start: downloadStart?.toISOString() ?? null,
+        download_end: downloadEnd?.toISOString() ?? null,
       })
       .select(
-        "id, slug, title, original_name, size_bytes, download_start, download_end, created_at",
+        "id, slug, title, original_name, size_bytes, download_start, download_end, created_at, access_password",
       )
       .single();
 
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
         downloadStart: data.download_start,
         downloadEnd: data.download_end,
         createdAt: data.created_at,
+        accessPassword: data.access_password,
       },
     });
   } catch {

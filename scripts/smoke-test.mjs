@@ -143,8 +143,70 @@ try {
   createdDocument = null;
   storagePath = null;
 
+  const openInit = await fetch(`${baseUrl}/api/admin/uploads/init`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({
+      fileName: "templink-open-download.txt",
+      fileType: "text/plain",
+      fileSize: file.size,
+    }),
+  });
+  const openInitResult = await openInit.json();
+  if (!openInit.ok) throw new Error(`Open upload init failed: ${JSON.stringify(openInitResult)}`);
+  storagePath = openInitResult.path;
+
+  const { error: openUploadError } = await browserClient.storage
+    .from("documents")
+    .uploadToSignedUrl(openInitResult.path, openInitResult.token, file, {
+      contentType: "text/plain",
+    });
+  if (openUploadError) throw openUploadError;
+
+  const openCreate = await fetch(`${baseUrl}/api/admin/documents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({
+      storagePath,
+      title: "TempLink open download test",
+      originalName: "templink-open-download.txt",
+      mimeType: "text/plain",
+      sizeBytes: file.size,
+      downloadStart: null,
+      downloadEnd: null,
+      password: "",
+    }),
+  });
+  const openCreateResult = await openCreate.json();
+  if (!openCreate.ok) {
+    throw new Error(`Open document create failed: ${JSON.stringify(openCreateResult)}`);
+  }
+  createdDocument = openCreateResult.document;
+
+  const openDownload = await fetch(`${baseUrl}/api/download/${createdDocument.slug}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  const openDownloadResult = await openDownload.json();
+  if (!openDownload.ok) {
+    throw new Error(`Open download grant failed: ${JSON.stringify(openDownloadResult)}`);
+  }
+  const openObject = await fetch(openDownloadResult.url);
+  if (!openObject.ok || (await openObject.text()) !== content) {
+    throw new Error("Passwordless unlimited download did not return the expected file.");
+  }
+
+  const openRemove = await fetch(`${baseUrl}/api/admin/documents/${createdDocument.id}`, {
+    method: "DELETE",
+    headers: { Cookie: cookie },
+  });
+  if (!openRemove.ok) throw new Error(`Open document delete failed: ${await openRemove.text()}`);
+  createdDocument = null;
+  storagePath = null;
+
   console.log(
-    "Smoke test passed: login, create, file replacement, metadata/password update, download and delete.",
+    "Smoke test passed: protected and passwordless downloads, optional dates, update, replacement and delete.",
   );
 } finally {
   if (createdDocument?.id) {

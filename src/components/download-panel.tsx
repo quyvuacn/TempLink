@@ -45,11 +45,14 @@ export function DownloadPanel({ document, demoMode }: Props) {
   const status = now === null ? "scheduled" : getDocumentStatus(document, now);
   const statusCopy = useMemo(() => {
     if (now === null) return "Checking availability…";
-    if (status === "scheduled") {
+    if (status === "scheduled" && document.downloadStart) {
       return `Available in ${countdown(new Date(document.downloadStart).getTime(), now)}.`;
     }
     if (status === "expired") return "This download has expired.";
-    return `Available · ${countdown(new Date(document.downloadEnd).getTime(), now)} remaining.`;
+    if (document.downloadEnd) {
+      return `Available · ${countdown(new Date(document.downloadEnd).getTime(), now)} remaining.`;
+    }
+    return "Available now.";
   }, [document.downloadEnd, document.downloadStart, now, status]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -83,10 +86,12 @@ export function DownloadPanel({ document, demoMode }: Props) {
       <span className="document-chip"><FileIcon /> {document.originalName} · {formatBytes(document.sizeBytes)}</span>
       <h1>{document.title}</h1>
 
-      <div className="window-panel">
-        <div className="window-item"><span>Available from</span><strong>{formatDate(document.downloadStart)}</strong></div>
-        <div className="window-item"><span>Expires at</span><strong>{formatDate(document.downloadEnd)}</strong></div>
-      </div>
+      {(document.downloadStart || document.downloadEnd) && (
+        <div className="window-panel">
+          {document.downloadStart && <div className="window-item"><span>Available from</span><strong>{formatDate(document.downloadStart)}</strong></div>}
+          {document.downloadEnd && <div className="window-item"><span>Expires at</span><strong>{formatDate(document.downloadEnd)}</strong></div>}
+        </div>
+      )}
 
       <div className={`access-status ${status}`}>
         <ClockIcon />
@@ -94,21 +99,23 @@ export function DownloadPanel({ document, demoMode }: Props) {
       </div>
 
       <form className="download-form" onSubmit={submit}>
-        <div className="field">
-          <label htmlFor="download-password">Password</label>
-          <input
-            id="download-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Enter password"
-            autoComplete="off"
-            disabled={now === null || status !== "active"}
-            required
-          />
-        </div>
+        {document.passwordRequired && (
+          <div className="field">
+            <label htmlFor="download-password">Password</label>
+            <input
+              id="download-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Enter password"
+              autoComplete="off"
+              disabled={now === null || status !== "active"}
+              required
+            />
+          </div>
+        )}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="primary-button" type="submit" disabled={now === null || status !== "active" || !password || loading}>
+        <button className="primary-button" type="submit" disabled={now === null || status !== "active" || (document.passwordRequired && !password) || loading}>
           <DownloadIcon /> {loading ? "Checking…" : "Download"}
         </button>
       </form>
